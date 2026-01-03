@@ -259,44 +259,45 @@ def get_modal_service():
 def get_query_analysis(messages: list) -> dict:
     """
     Get expanded query and topic classification from Modal service.
-    
+
     Args:
         messages: List of message dicts with 'role' and 'content' keys
-        
+
     Returns:
-        dict with 'expanded_query' and 'topic' (level_1, level_2)
+        dict with 'expanded_query', 'topic' (level_1, level_2), and optional 'error'
     """
     service = get_modal_service()
     if service is None:
-        # Show single message when Modal instance is not running
-        st.error("Modal instance is not running. Please start the Modal service.")
-        # Return null/empty values - do not display topic tags and expanded query
+        # Return empty strings with error - do not display topic tags and expanded query
         return {
-            'expanded_query': None,
-            'topic': None
+            'expanded_query': '',
+            'topic': {},
+            'error': "Modal instance is not running. Please start the Modal service."
         }
-    
+
     try:
         # Call modal service with chat history
         result = service.infer.remote(messages=messages)
-        
+
         # Check for errors
         if isinstance(result, dict) and 'error' in result:
             # Check if error indicates Modal instance is not running
             error_msg = result.get('error', '').lower()
             if 'not running' in error_msg or 'not found' in error_msg or 'connection' in error_msg:
-                st.error("Modal instance is not running. Please start the Modal service.")
-                # Return null/empty values - do not display topic tags and expanded query
+                # Return empty strings with error - do not display topic tags and expanded query
                 return {
-                    'expanded_query': None,
-                    'topic': None
+                    'expanded_query': '',
+                    'topic': {},
+                    'error': "Modal instance is not running. Please start the Modal service."
                 }
             else:
-                st.warning(f"Modal service error: {result.get('error')}")
-            if 'raw_output' in result:
-                st.caption(f"Raw output: {result['raw_output'][:100]}...")
-            return get_fallback_analysis(messages)
-        
+                # For other errors, use fallback with warning
+                fallback = get_fallback_analysis(messages)
+                fallback['warning'] = f"Modal service error: {result.get('error')}"
+                if 'raw_output' in result:
+                    fallback['raw_output'] = result['raw_output'][:100]
+                return fallback
+
         # Extract labels from result
         # Result should have 'labels' key with 'expanded_query' and 'topic'
         labels = result.get('labels', {})
@@ -305,17 +306,18 @@ def get_query_analysis(messages: list) -> dict:
             if 'expanded_query' in result:
                 labels = result
             else:
-                st.warning("Modal service returned unexpected format")
-                return get_fallback_analysis(messages)
-        
+                fallback = get_fallback_analysis(messages)
+                fallback['warning'] = "Modal service returned unexpected format"
+                return fallback
+
         expanded_query = labels.get('expanded_query', '')
         if not expanded_query and messages:
             expanded_query = messages[-1].get('content', '')
-        
+
         topic = labels.get('topic', {})
         if not topic or 'level_1' not in topic:
             topic = {'level_1': 'General', 'level_2': 'Other'}
-        
+
         return {
             'expanded_query': expanded_query,
             'topic': topic
@@ -324,15 +326,16 @@ def get_query_analysis(messages: list) -> dict:
         # Check if exception indicates Modal instance is not running
         error_str = str(e).lower()
         if 'not running' in error_str or 'not found' in error_str or 'connection' in error_str or 'timeout' in error_str:
-            st.error("Modal instance is not running. Please start the Modal service.")
-            # Return null/empty values - do not display topic tags and expanded query
+            # Return empty strings with error - do not display topic tags and expanded query
             return {
-                'expanded_query': None,
-                'topic': None
+                'expanded_query': '',
+                'topic': {},
+                'error': "Modal instance is not running. Please start the Modal service."
             }
         else:
-            st.warning(f"Error calling Modal service: {str(e)}")
-        return get_fallback_analysis(messages)
+            fallback = get_fallback_analysis(messages)
+            fallback['warning'] = f"Error calling Modal service: {str(e)}"
+            return fallback
 
 
 def get_fallback_analysis(messages: list) -> dict:
@@ -459,24 +462,29 @@ def main():
     for msg in st.session_state.messages:
         if msg['role'] == 'user':
             analysis = msg.get('analysis')
+            # Display error/warning for this message if any
+            if analysis and analysis.get('error'):
+                st.error(analysis['error'])
+            if analysis and analysis.get('warning'):
+                st.warning(analysis['warning'])
             with st.chat_message("user", avatar="👦"):
                 if analysis:
-                    # Build topic tags HTML only if topic exists and is not None
+                    # Build topic tags HTML only if topic exists and has valid values
                     topic_html = ""
                     topic = analysis.get('topic')
-                    if topic is not None and isinstance(topic, dict) and topic.get('level_1') and topic.get('level_2'):
+                    if topic and isinstance(topic, dict) and topic.get('level_1') and topic.get('level_2'):
                         topic_html = f'<div class="topic-tag-container"><span class="topic-badge">{html.escape(str(topic["level_1"]))}</span><span class="topic-sep">›</span><span class="topic-badge active">{html.escape(str(topic["level_2"]))}</span></div>'
-                    
-                    # Build expanded query HTML only if expanded_query exists and is not None/empty
+
+                    # Build expanded query HTML only if expanded_query exists and is not empty
                     expanded_query_html = ""
                     expanded_query = analysis.get('expanded_query')
-                    if expanded_query is not None and expanded_query != "":
+                    if expanded_query and expanded_query != "":
                         expanded_query_html = f'<div class="expanded-query-container"><div class="expanded-query-label">EXPANDED QUERY</div><div class="expanded-query-value">{html.escape(str(expanded_query))}</div></div>'
-                    
+
                     # Only show formatted message if we have at least topic or expanded query
                     has_topic = bool(topic_html)
                     has_expanded = bool(expanded_query_html)
-                    
+
                     if has_topic or has_expanded:
                         # Build the HTML structure conditionally
                         html_content = f'<div class="user-message-container"><div class="message-top-row"><div class="message-text-area">{html.escape(str(msg["content"]))}</div>{topic_html if has_topic else ""}</div>{expanded_query_html if has_expanded else ""}</div>'
@@ -527,22 +535,30 @@ def main():
         # Get analysis from Modal service with full chat history
         with st.spinner("Analyzing query..."):
             analysis = get_query_analysis(st.session_state.messages)
-        
+
+        # Display error or warning messages from analysis
+        if analysis.get('error'):
+            st.error(analysis['error'])
+        if analysis.get('warning'):
+            st.warning(analysis['warning'])
+            if analysis.get('raw_output'):
+                st.caption(f"Raw output: {analysis['raw_output']}...")
+
         # Update the user message with analysis
         st.session_state.messages[-1]['analysis'] = analysis
 
         with st.chat_message("user", avatar="🐿️"):
-            # Build topic tags HTML only if topic exists and is not None
+            # Build topic tags HTML only if topic exists and has valid values
             topic_html = ""
             if analysis:
                 topic = analysis.get('topic')
-                if topic is not None and isinstance(topic, dict) and topic.get('level_1') and topic.get('level_2'):
+                if topic and isinstance(topic, dict) and topic.get('level_1') and topic.get('level_2'):
                     topic_html = f'<div class="topic-tag-container"><span class="topic-badge">{html.escape(str(topic["level_1"]))}</span><span class="topic-sep">›</span><span class="topic-badge active">{html.escape(str(topic["level_2"]))}</span></div>'
                 
-                # Build expanded query HTML only if expanded_query exists and is not None/empty
+                # Build expanded query HTML only if expanded_query exists and is not empty
                 expanded_query_html = ""
                 expanded_query = analysis.get('expanded_query')
-                if expanded_query is not None and expanded_query != "":
+                if expanded_query and expanded_query != "":
                     expanded_query_html = f'<div class="expanded-query-container"><div class="expanded-query-label">EXPANDED QUERY</div><div class="expanded-query-value">{html.escape(str(expanded_query))}</div></div>'
             
             # Only show formatted message if we have at least topic or expanded query
