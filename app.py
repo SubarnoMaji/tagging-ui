@@ -463,38 +463,24 @@ def main():
                 if analysis:
                     # Build topic tags HTML only if topic exists and is not None
                     topic_html = ""
-                    if analysis.get('topic') is not None:
-                        topic_html = f"""
-                            <div class="topic-tag-container">
-                                <span class="topic-badge">{html.escape(str(analysis['topic']['level_1']))}</span>
-                                <span class="topic-sep">›</span>
-                                <span class="topic-badge active">{html.escape(str(analysis['topic']['level_2']))}</span>
-                            </div>
-                        """
+                    topic = analysis.get('topic')
+                    if topic is not None and isinstance(topic, dict) and topic.get('level_1') and topic.get('level_2'):
+                        topic_html = f'<div class="topic-tag-container"><span class="topic-badge">{html.escape(str(topic["level_1"]))}</span><span class="topic-sep">›</span><span class="topic-badge active">{html.escape(str(topic["level_2"]))}</span></div>'
                     
-                    # Build expanded query HTML only if expanded_query exists and is not None
+                    # Build expanded query HTML only if expanded_query exists and is not None/empty
                     expanded_query_html = ""
-                    if analysis.get('expanded_query') is not None:
-                        expanded_query_html = f"""
-                            <div class="expanded-query-container">
-                                <div class="expanded-query-label">EXPANDED QUERY</div>
-                                <div class="expanded-query-value">{html.escape(str(analysis['expanded_query']))}</div>
-                            </div>
-                        """
+                    expanded_query = analysis.get('expanded_query')
+                    if expanded_query is not None and expanded_query != "":
+                        expanded_query_html = f'<div class="expanded-query-container"><div class="expanded-query-label">EXPANDED QUERY</div><div class="expanded-query-value">{html.escape(str(expanded_query))}</div></div>'
                     
                     # Only show formatted message if we have at least topic or expanded query
-                    if topic_html or expanded_query_html:
-                        st.markdown(f"""
-                        <div class="user-message-container">
-                            <div class="message-top-row">
-                                <div class="message-text-area">
-                                    {html.escape(str(msg['content']))}
-                                </div>
-                                {topic_html}
-                            </div>
-                            {expanded_query_html}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    has_topic = bool(topic_html)
+                    has_expanded = bool(expanded_query_html)
+                    
+                    if has_topic or has_expanded:
+                        # Build the HTML structure conditionally
+                        html_content = f'<div class="user-message-container"><div class="message-top-row"><div class="message-text-area">{html.escape(str(msg["content"]))}</div>{topic_html if has_topic else ""}</div>{expanded_query_html if has_expanded else ""}</div>'
+                        st.markdown(html_content, unsafe_allow_html=True)
                     else:
                         st.write(msg['content'])
                 else:
@@ -548,38 +534,25 @@ def main():
         with st.chat_message("user", avatar="🐿️"):
             # Build topic tags HTML only if topic exists and is not None
             topic_html = ""
-            if analysis and analysis.get('topic') is not None:
-                topic_html = f"""
-                    <div class="topic-tag-container">
-                        <span class="topic-badge">{html.escape(str(analysis['topic']['level_1']))}</span>
-                        <span class="topic-sep">›</span>
-                        <span class="topic-badge active">{html.escape(str(analysis['topic']['level_2']))}</span>
-                    </div>
-                """
-            
-            # Build expanded query HTML only if expanded_query exists and is not None
-            expanded_query_html = ""
-            if analysis and analysis.get('expanded_query') is not None:
-                expanded_query_html = f"""
-                    <div class="expanded-query-container">
-                        <div class="expanded-query-label">EXPANDED QUERY</div>
-                        <div class="expanded-query-value">{html.escape(str(analysis['expanded_query']))}</div>
-                    </div>
-                """
+            if analysis:
+                topic = analysis.get('topic')
+                if topic is not None and isinstance(topic, dict) and topic.get('level_1') and topic.get('level_2'):
+                    topic_html = f'<div class="topic-tag-container"><span class="topic-badge">{html.escape(str(topic["level_1"]))}</span><span class="topic-sep">›</span><span class="topic-badge active">{html.escape(str(topic["level_2"]))}</span></div>'
+                
+                # Build expanded query HTML only if expanded_query exists and is not None/empty
+                expanded_query_html = ""
+                expanded_query = analysis.get('expanded_query')
+                if expanded_query is not None and expanded_query != "":
+                    expanded_query_html = f'<div class="expanded-query-container"><div class="expanded-query-label">EXPANDED QUERY</div><div class="expanded-query-value">{html.escape(str(expanded_query))}</div></div>'
             
             # Only show formatted message if we have at least topic or expanded query
-            if topic_html or expanded_query_html:
-                st.markdown(f"""
-                <div class="user-message-container">
-                    <div class="message-top-row">
-                        <div class="message-text-area">
-                            {html.escape(str(prompt))}
-                        </div>
-                        {topic_html}
-                    </div>
-                    {expanded_query_html}
-                </div>
-                """, unsafe_allow_html=True)
+            has_topic = bool(topic_html)
+            has_expanded = bool(expanded_query_html)
+            
+            if has_topic or has_expanded:
+                # Build the HTML structure conditionally
+                html_content = f'<div class="user-message-container"><div class="message-top-row"><div class="message-text-area">{html.escape(str(prompt))}</div>{topic_html if has_topic else ""}</div>{expanded_query_html if has_expanded else ""}</div>'
+                st.markdown(html_content, unsafe_allow_html=True)
             else:
                 st.write(prompt)
 
