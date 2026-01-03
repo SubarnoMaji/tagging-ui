@@ -480,9 +480,12 @@ def main():
         prompt = st.session_state.pending_prompt
         st.session_state.pending_prompt = None
 
-    # Chat input
+    # Chat input - always show the input box
+    chat_input = st.chat_input("Type your message...")
+    
+    # Use chat input if no pending prompt, otherwise use pending prompt
     if not prompt:
-        prompt = st.chat_input("Type your message...")
+        prompt = chat_input
 
     if prompt:
         # Add user message first (without analysis)
