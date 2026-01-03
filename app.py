@@ -252,7 +252,7 @@ def get_modal_service():
         )
         return QueryExpansionService()
     except Exception as e:
-        st.error(f"Failed to connect to Modal service: {e}")
+        # Return None silently - error will be handled in get_query_analysis
         return None
 
 
@@ -268,8 +268,13 @@ def get_query_analysis(messages: list) -> dict:
     """
     service = get_modal_service()
     if service is None:
-        # Fallback to mock if modal is not available
-        return get_fallback_analysis(messages)
+        # Show single message when Modal instance is not running
+        st.error("Modal instance is not running. Please start the Modal service.")
+        # Return null/empty values - do not display topic tags and expanded query
+        return {
+            'expanded_query': None,
+            'topic': None
+        }
     
     try:
         # Call modal service with chat history
@@ -277,7 +282,17 @@ def get_query_analysis(messages: list) -> dict:
         
         # Check for errors
         if isinstance(result, dict) and 'error' in result:
-            st.warning(f"Modal service error: {result.get('error')}")
+            # Check if error indicates Modal instance is not running
+            error_msg = result.get('error', '').lower()
+            if 'not running' in error_msg or 'not found' in error_msg or 'connection' in error_msg:
+                st.error("Modal instance is not running. Please start the Modal service.")
+                # Return null/empty values - do not display topic tags and expanded query
+                return {
+                    'expanded_query': None,
+                    'topic': None
+                }
+            else:
+                st.warning(f"Modal service error: {result.get('error')}")
             if 'raw_output' in result:
                 st.caption(f"Raw output: {result['raw_output'][:100]}...")
             return get_fallback_analysis(messages)
@@ -306,7 +321,17 @@ def get_query_analysis(messages: list) -> dict:
             'topic': topic
         }
     except Exception as e:
-        st.warning(f"Error calling Modal service: {str(e)}")
+        # Check if exception indicates Modal instance is not running
+        error_str = str(e).lower()
+        if 'not running' in error_str or 'not found' in error_str or 'connection' in error_str or 'timeout' in error_str:
+            st.error("Modal instance is not running. Please start the Modal service.")
+            # Return null/empty values - do not display topic tags and expanded query
+            return {
+                'expanded_query': None,
+                'topic': None
+            }
+        else:
+            st.warning(f"Error calling Modal service: {str(e)}")
         return get_fallback_analysis(messages)
 
 
@@ -436,24 +461,42 @@ def main():
             analysis = msg.get('analysis')
             with st.chat_message("user", avatar="👦"):
                 if analysis:
-                    st.markdown(f"""
-                    <div class="user-message-container">
-                        <div class="message-top-row">
-                            <div class="message-text-area">
-                                {html.escape(str(msg['content']))}
-                            </div>
+                    # Build topic tags HTML only if topic exists and is not None
+                    topic_html = ""
+                    if analysis.get('topic') is not None:
+                        topic_html = f"""
                             <div class="topic-tag-container">
                                 <span class="topic-badge">{html.escape(str(analysis['topic']['level_1']))}</span>
                                 <span class="topic-sep">›</span>
                                 <span class="topic-badge active">{html.escape(str(analysis['topic']['level_2']))}</span>
                             </div>
+                        """
+                    
+                    # Build expanded query HTML only if expanded_query exists and is not None
+                    expanded_query_html = ""
+                    if analysis.get('expanded_query') is not None:
+                        expanded_query_html = f"""
+                            <div class="expanded-query-container">
+                                <div class="expanded-query-label">EXPANDED QUERY</div>
+                                <div class="expanded-query-value">{html.escape(str(analysis['expanded_query']))}</div>
+                            </div>
+                        """
+                    
+                    # Only show formatted message if we have at least topic or expanded query
+                    if topic_html or expanded_query_html:
+                        st.markdown(f"""
+                        <div class="user-message-container">
+                            <div class="message-top-row">
+                                <div class="message-text-area">
+                                    {html.escape(str(msg['content']))}
+                                </div>
+                                {topic_html}
+                            </div>
+                            {expanded_query_html}
                         </div>
-                        <div class="expanded-query-container">
-                            <div class="expanded-query-label">EXPANDED QUERY</div>
-                            <div class="expanded-query-value">{html.escape(str(analysis['expanded_query']))}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.write(msg['content'])
                 else:
                     st.write(msg['content'])
         else:
@@ -503,24 +546,42 @@ def main():
         st.session_state.messages[-1]['analysis'] = analysis
 
         with st.chat_message("user", avatar="🐿️"):
-            st.markdown(f"""
-            <div class="user-message-container">
-                <div class="message-top-row">
-                    <div class="message-text-area">
-                        {html.escape(str(prompt))}
-                    </div>
+            # Build topic tags HTML only if topic exists and is not None
+            topic_html = ""
+            if analysis and analysis.get('topic') is not None:
+                topic_html = f"""
                     <div class="topic-tag-container">
                         <span class="topic-badge">{html.escape(str(analysis['topic']['level_1']))}</span>
                         <span class="topic-sep">›</span>
                         <span class="topic-badge active">{html.escape(str(analysis['topic']['level_2']))}</span>
                     </div>
+                """
+            
+            # Build expanded query HTML only if expanded_query exists and is not None
+            expanded_query_html = ""
+            if analysis and analysis.get('expanded_query') is not None:
+                expanded_query_html = f"""
+                    <div class="expanded-query-container">
+                        <div class="expanded-query-label">EXPANDED QUERY</div>
+                        <div class="expanded-query-value">{html.escape(str(analysis['expanded_query']))}</div>
+                    </div>
+                """
+            
+            # Only show formatted message if we have at least topic or expanded query
+            if topic_html or expanded_query_html:
+                st.markdown(f"""
+                <div class="user-message-container">
+                    <div class="message-top-row">
+                        <div class="message-text-area">
+                            {html.escape(str(prompt))}
+                        </div>
+                        {topic_html}
+                    </div>
+                    {expanded_query_html}
                 </div>
-                <div class="expanded-query-container">
-                    <div class="expanded-query-label">EXPANDED QUERY</div>
-                    <div class="expanded-query-value">{html.escape(str(analysis['expanded_query']))}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            else:
+                st.write(prompt)
 
         with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Thinking..."):
