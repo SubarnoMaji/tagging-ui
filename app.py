@@ -7,13 +7,16 @@ import html
 import json
 import os
 # Page config - Wide layout
+
+os.environ["MODAL_TOKEN_ID"] = st.secrets["token_id"]
+os.environ["MODAL_TOKEN_SECRET"] = st.secrets["token_secret"]
+
 st.set_page_config(
     page_title="Query Expansion & Topic Tagging",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 # Custom CSS - Dark themed professional style
 st.markdown("""
 <style>
